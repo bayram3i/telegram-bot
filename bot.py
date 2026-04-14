@@ -1,12 +1,12 @@
 import telebot
-from telebot.types import ReplyKeyboardMarkup, InlineKeyboardMarkup, InlineKeyboardButton
-import time, json, os
+from telebot.types import *
+import time, json, os, threading
 
-TOKEN = "8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws"
+TOKEN = os.getenv("8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws")  # مهم ل Render
 CHANNEL = "@bayram_vip"
 ADMIN = "@Gold_3id"
 
-bot = telebot.TeleBot(TOKEN)
+bot = telebot.TeleBot(TOKEN, parse_mode="HTML")
 
 DATA_FILE = "data.json"
 
@@ -25,7 +25,7 @@ def get_user(uid):
     uid = str(uid)
     if uid not in users:
         users[uid] = {
-            "points": 0,
+            "balance": 0.0,
             "last_daily": 0,
             "last_task": 0,
             "invites": 0,
@@ -43,7 +43,7 @@ def check_sub(user_id):
 
 DAY = 86400
 
-# القوائم
+# القائمة
 def main_menu():
     m = ReplyKeyboardMarkup(resize_keyboard=True)
     m.row("💰 أرباحي", "🎁 المهام")
@@ -51,36 +51,32 @@ def main_menu():
     m.row("👥 دعوة الأصدقاء", "☎️ تواصل معنا")
     return m
 
-def join_menu():
-    m = ReplyKeyboardMarkup(resize_keyboard=True)
-    m.row("📢 اشترك بالقناة")
-    m.row("✅ تحقق")
-    return m
-
-# start + إحالة
+# start
 @bot.message_handler(commands=['start'])
 def start(msg):
     uid = msg.from_user.id
     user = get_user(uid)
 
     args = msg.text.split()
+
     if len(args) > 1:
         inviter = args[1]
         if inviter != str(uid) and inviter in users and user["invited_by"] is None:
             user["invited_by"] = inviter
-            users[inviter]["points"] += 10
+            users[inviter]["balance"] += 0.20
             users[inviter]["invites"] += 1
-            bot.send_message(int(inviter), "🎉 دعوة جديدة +10 نقاط")
+
+            bot.send_message(int(inviter), "🎉 شخص دخل من رابطك +0.20$")
 
     save()
 
     if not check_sub(uid):
         markup = InlineKeyboardMarkup()
         markup.add(
-            InlineKeyboardButton("📢 اشترك", url=f"https://t.me/{CHANNEL.replace('@','')}"),
+            InlineKeyboardButton("📢 اشترك", url="https://t.me/bayram_vip"),
             InlineKeyboardButton("✅ تحقق", callback_data="check")
         )
-        bot.send_message(uid, "🚫 اشترك أولاً ثم تحقق", reply_markup=markup)
+        bot.send_message(uid, "🚫 يجب الاشتراك بالقناة أولاً", reply_markup=markup)
         return
 
     bot.send_message(uid, "👋 أهلاً بك في بوت الربح 💸", reply_markup=main_menu())
@@ -97,7 +93,8 @@ def check(call):
 @bot.message_handler(func=lambda m: m.text == "💰 أرباحي")
 def balance(m):
     u = get_user(m.from_user.id)
-    bot.send_message(m.chat.id, f"💰 نقاطك: {u['points']}\n👥 دعواتك: {u['invites']}")
+    bot.send_message(m.chat.id,
+                     f"💰 رصيدك: {u['balance']}$\n👥 دعواتك: {u['invites']}")
 
 # مكافأة يومية
 @bot.message_handler(func=lambda m: m.text == "🎯 مكافأة يومية")
@@ -109,18 +106,22 @@ def daily(m):
         bot.send_message(m.chat.id, "⏳ استلمتها اليوم")
         return
 
-    u["points"] += 5
+    u["balance"] += 0.10
     u["last_daily"] = now
     save()
 
-    bot.send_message(m.chat.id, "🎉 +5 نقاط")
+    bot.send_message(m.chat.id, "🎉 +0.10$")
 
 # المهام
 @bot.message_handler(func=lambda m: m.text == "🎁 المهام")
 def tasks(m):
-    bot.send_message(m.chat.id, "📢 تفاعل بالقناة ثم اضغط تنفيذ")
+    markup = ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row("📢 تنفيذ المهمة")
+    markup.row("🔙 رجوع")
 
-@bot.message_handler(func=lambda m: m.text == "📢 تنفيذ")
+    bot.send_message(m.chat.id, "📢 تفاعل بالقناة ثم نفذ", reply_markup=markup)
+
+@bot.message_handler(func=lambda m: m.text == "📢 تنفيذ المهمة")
 def do_task(m):
     u = get_user(m.from_user.id)
     now = time.time()
@@ -130,14 +131,14 @@ def do_task(m):
         return
 
     if now - u["last_task"] < DAY:
-        bot.send_message(m.chat.id, "⏳ نفذت المهمة اليوم")
+        bot.send_message(m.chat.id, "⏳ نفذت اليوم")
         return
 
-    u["points"] += 3
+    u["balance"] += 0.15
     u["last_task"] = now
     save()
 
-    bot.send_message(m.chat.id, "✅ +3 نقاط")
+    bot.send_message(m.chat.id, "✅ +0.15$")
 
 # دعوة
 @bot.message_handler(func=lambda m: m.text == "👥 دعوة الأصدقاء")
@@ -149,26 +150,37 @@ def invite(m):
 @bot.message_handler(func=lambda m: m.text == "📊 سحب الأرباح")
 def withdraw(m):
     u = get_user(m.from_user.id)
-    if u["points"] < 50:
-        bot.send_message(m.chat.id, "❌ تحتاج 50 نقطة")
-    else:
-        bot.send_message(m.chat.id, "💸 تم الطلب (تجريبي)")
+
+    if u["balance"] < 50:
+        bot.send_message(m.chat.id, "❌ الحد الأدنى 50$")
+        return
+
+    bot.send_message(m.chat.id, "💸 تم إرسال طلبك للإدارة")
 
 # تواصل
 @bot.message_handler(func=lambda m: m.text == "☎️ تواصل معنا")
 def contact(m):
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("📩 تواصل", url="https://t.me/Gold_3id"))
+    bot.send_message(m.chat.id, "📩 تواصل: @Gold_3id")
 
-    bot.send_message(m.chat.id,
-                     "☎️ الدعم الفني\n👤 @Gold_3id",
-                     reply_markup=markup)
+# 🔥 نظام إعادة تشغيل تلقائي
+def run_bot():
+    while True:
+        try:
+            print("BOT STARTED...")
+            bot.infinity_polling(skip_pending=True)
+        except Exception as e:
+            print("ERROR:", e)
+            time.sleep(5)
 
-# تشغيل مستمر
-while True:
-    try:
-        print("RUNNING...")
-        bot.infinity_polling(timeout=10, long_polling_timeout=5)
-    except Exception as e:
-        print("Error:", e)
-        time.sleep(5)
+# تشغيل البوت في Thread
+threading.Thread(target=run_bot).start()
+
+# إبقاء Render شغال (مهم)
+from flask import Flask
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    return "Bot is running!"
+
+app.run(host='0.0.0.0', port=10000)
