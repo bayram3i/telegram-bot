@@ -1,6 +1,6 @@
 import telebot
 from telebot.types import *
-import time, json, os, threading
+import time, json, os, threading, datetime
 
 TOKEN = "8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws"
 CHANNEL = "@bayram_vip"
@@ -48,7 +48,9 @@ def main_menu():
     m = ReplyKeyboardMarkup(resize_keyboard=True)
     m.row("💰 أرباحي", "🎁 المهام")
     m.row("🎯 مكافأة يومية", "📊 سحب الأرباح")
-    m.row("👥 دعوة الأصدقاء", "☎️ تواصل معنا")
+    m.row("👥 دعوة الأصدقاء", "💳 إيداع")
+    m.row("📅 تاريخ اليوم", "🆔 حسابي")
+    m.row("☎️ تواصل معنا")
     return m
 
 # START
@@ -59,16 +61,13 @@ def start(msg):
 
     args = msg.text.split()
 
-    # نظام الدعوات
     if len(args) > 1:
         inviter = args[1]
         if inviter != str(uid) and inviter in users and user["invited_by"] is None:
             user["invited_by"] = inviter
             users[inviter]["balance"] += 0.20
             users[inviter]["invites"] += 1
-
             bot.send_message(int(inviter), "🎉 دعوة جديدة +0.20$")
-            bot.send_message(ADMIN_ID, f"👥 مستخدم جديد عبر دعوة\nID: {uid}")
 
     save()
 
@@ -78,12 +77,12 @@ def start(msg):
             InlineKeyboardButton("📢 اشترك", url="https://t.me/bayram_vip"),
             InlineKeyboardButton("✅ تحقق", callback_data="check")
         )
-        bot.send_message(uid, "🚫 اشترك بالقناة أولاً", reply_markup=markup)
+        bot.send_message(uid, "🚫 يجب الاشتراك بالقناة أولاً", reply_markup=markup)
         return
 
-    bot.send_message(uid, "🔥 أهلاً بك في بوت الربح VIP", reply_markup=main_menu())
+    bot.send_message(uid, "🔥 أهلاً بك في بوت VIP", reply_markup=main_menu())
 
-# تحقق الاشتراك
+# تحقق
 @bot.callback_query_handler(func=lambda c: c.data == "check")
 def check(call):
     if check_sub(call.from_user.id):
@@ -91,21 +90,36 @@ def check(call):
     else:
         bot.answer_callback_query(call.id, "❌ لم تشترك")
 
+# رجوع (تم إصلاحها)
+@bot.message_handler(func=lambda m: m.text == "🔙 رجوع")
+def back(m):
+    bot.send_message(m.chat.id, "🔙 رجعت للقائمة", reply_markup=main_menu())
+
 # أرباحي
 @bot.message_handler(func=lambda m: m.text == "💰 أرباحي")
 def balance(m):
     u = get_user(m.from_user.id)
-    bot.send_message(m.chat.id,
-                     f"💰 رصيدك: {u['balance']}$\n👥 دعواتك: {u['invites']}")
+    bot.send_message(m.chat.id, f"💰 رصيدك: {u['balance']}$\n👥 دعواتك: {u['invites']}")
 
-# مكافأة يومية
+# تاريخ اليوم
+@bot.message_handler(func=lambda m: m.text == "📅 تاريخ اليوم")
+def date(m):
+    today = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    bot.send_message(m.chat.id, f"📅 التاريخ:\n{today}")
+
+# ID
+@bot.message_handler(func=lambda m: m.text == "🆔 حسابي")
+def myid(m):
+    bot.send_message(m.chat.id, f"🆔 ID الخاص بك:\n{m.from_user.id}")
+
+# مكافأة
 @bot.message_handler(func=lambda m: m.text == "🎯 مكافأة يومية")
 def daily(m):
     u = get_user(m.from_user.id)
     now = time.time()
 
     if now - u["last_daily"] < DAY:
-        bot.send_message(m.chat.id, "⏳ استلمتها اليوم")
+        bot.send_message(m.chat.id, "⏳ أخذتها اليوم")
         return
 
     u["balance"] += 0.10
@@ -114,19 +128,23 @@ def daily(m):
 
     bot.send_message(m.chat.id, "🎉 +0.10$")
 
-# المهام
+# المهام (تصفح القناة)
 @bot.message_handler(func=lambda m: m.text == "🎁 المهام")
 def tasks(m):
     markup = ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row("📢 تنفيذ المهمة")
+    markup.row("📢 فتح القناة", "✅ تأكيد")
     markup.row("🔙 رجوع")
 
     bot.send_message(m.chat.id,
-                     "📢 تفاعل داخل القناة (مشاهدة + لايك)\nثم اضغط تنفيذ",
+                     "📢 ادخل القناة وتصفح المنشورات ثم اضغط تأكيد",
                      reply_markup=markup)
 
-@bot.message_handler(func=lambda m: m.text == "📢 تنفيذ المهمة")
-def do_task(m):
+@bot.message_handler(func=lambda m: m.text == "📢 فتح القناة")
+def open_channel(m):
+    bot.send_message(m.chat.id, "📢 الرابط:\nhttps://t.me/bayram_vip")
+
+@bot.message_handler(func=lambda m: m.text == "✅ تأكيد")
+def confirm_task(m):
     u = get_user(m.from_user.id)
     now = time.time()
 
@@ -135,77 +153,44 @@ def do_task(m):
         return
 
     if now - u["last_task"] < DAY:
-        bot.send_message(m.chat.id, "⏳ نفذت المهمة اليوم")
+        bot.send_message(m.chat.id, "⏳ نفذت اليوم")
         return
 
     u["balance"] += 0.15
     u["last_task"] = now
     save()
 
-    bot.send_message(m.chat.id, "✅ +0.15$")
+    bot.send_message(m.chat.id, "✅ تم +0.15$")
 
-# الدعوة
+# دعوة
 @bot.message_handler(func=lambda m: m.text == "👥 دعوة الأصدقاء")
 def invite(m):
     link = f"https://t.me/{bot.get_me().username}?start={m.from_user.id}"
-    bot.send_message(m.chat.id,
-                     f"👥 اربح 0.20$ لكل شخص\n\n🔗 رابطك:\n{link}")
+    bot.send_message(m.chat.id, f"👥 اربح 0.20$\n{link}")
 
-# السحب
+# سحب
 @bot.message_handler(func=lambda m: m.text == "📊 سحب الأرباح")
 def withdraw(m):
-    u = get_user(m.from_user.id)
+    bot.send_message(m.chat.id,
+                     "💳 طرق السحب:\nUSDT - Payeer - Vodafone - Binance - Western Union\n\n❌ الحد الأدنى 50$")
 
-    if u["balance"] < 50:
-        bot.send_message(m.chat.id, "❌ الحد الأدنى 50$")
-        return
-
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("💰 USDT", callback_data="usdt"),
-        InlineKeyboardButton("💳 Payeer", callback_data="payeer")
-    )
-    markup.add(
-        InlineKeyboardButton("📱 فودافون كاش", callback_data="vodafone")
-    )
-
-    bot.send_message(m.chat.id, "اختر طريقة السحب:", reply_markup=markup)
-
-# طلب السحب
-@bot.callback_query_handler(func=lambda c: c.data in ["usdt","payeer","vodafone"])
-def withdraw_request(call):
-    bot.send_message(call.message.chat.id,
-                     "✍️ أرسل بياناتك للسحب")
-
-    bot.send_message(ADMIN_ID,
-                     f"💸 طلب سحب جديد\nID: {call.from_user.id}")
+# إيداع
+@bot.message_handler(func=lambda m: m.text == "💳 إيداع")
+def deposit(m):
+    bot.send_message(m.chat.id,
+                     "💰 للإيداع:\nUSDT (TRC20)\n\n📩 تواصل مع الدعم")
 
 # تواصل
 @bot.message_handler(func=lambda m: m.text == "☎️ تواصل معنا")
 def contact(m):
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("📩 تواصل", url="https://t.me/Gold_3id"))
-
-    bot.send_message(m.chat.id,
-                     "☎️ الدعم\n@Gold_3id",
-                     reply_markup=markup)
-
-# منع التوقف (Heartbeat)
-def keep_alive():
-    while True:
-        try:
-            print("Still alive...")
-            time.sleep(300)
-        except:
-            pass
-
-threading.Thread(target=keep_alive).start()
+    bot.send_message(m.chat.id, "📩 @Gold_3id")
 
 # تشغيل دائم
-while True:
-    try:
-        print("BOT RUNNING...")
-        bot.infinity_polling(timeout=20, long_polling_timeout=10)
-    except Exception as e:
-        print("ERROR:", e)
-        time.sleep(5)
+def run():
+    while True:
+        try:
+            bot.infinity_polling()
+        except:
+            time.sleep(5)
+
+threading.Thread(target=run).start()
