@@ -2,6 +2,24 @@ from telegram import Update, ReplyKeyboardMarkup
 from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
 from datetime import datetime
 
+# 🔥 KEEP ALIVE (مهم)
+from flask import Flask
+from threading import Thread
+
+app_web = Flask('')
+
+@app_web.route('/')
+def home():
+    return "Bot is running!"
+
+def run():
+    app_web.run(host='0.0.0.0', port=10000)
+
+def keep_alive():
+    t = Thread(target=run)
+    t.start()
+
+# 🔐 التوكن
 TOKEN = "8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws"
 
 CHANNEL_USERNAME = "@bayram_vip"
@@ -54,22 +72,16 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not await is_subscribed(user_id, context):
         await update.message.reply_text(
-            f"""🚫 يجب الاشتراك أولاً في القناة 👇
-
-{CHANNEL_LINK}
-
-⚠️ بعد الاشتراك أرسل /start"""
+            f"🚫 اشترك أولاً:\n{CHANNEL_LINK}\nثم أرسل /start"
         )
         return
 
     await update.message.reply_text(
-        f"""🔥 أهلاً بك في أقوى بوت أرباح 🔥
+        f"""🔥 أهلاً بك في بوت الأرباح 🔥
 
-💸 اربح يومياً بدون خبرة
-👥 أرباحك تزيد مع دعوة الأصدقاء
+💸 اربح يومياً بسهولة
+👥 زيد أرباحك بدعوة الأصدقاء
 🚀 نظام ذكي وتحديث مستمر
-
-📊 كلما زاد نشاطك → زادت أرباحك
 
 📞 الدعم: {SUPPORT}""",
         reply_markup=main_keyboard
@@ -91,101 +103,61 @@ async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # الإيداع
     if text == "💳 إيداع":
-        await update.message.reply_text("💰 اختر طريقة الإيداع:", reply_markup=deposit_keyboard)
+        await update.message.reply_text("💰 اختر:", reply_markup=deposit_keyboard)
 
     elif text == "USDT TRC20":
-        await update.message.reply_text(f"💰 عنوان TRC20:\n{USDT_TRC20}")
+        await update.message.reply_text(USDT_TRC20)
 
     elif text == "USDT BEP20":
-        await update.message.reply_text(f"💰 عنوان BEP20:\n{USDT_BEP20}")
+        await update.message.reply_text(USDT_BEP20)
 
     elif text == "BTC":
-        await update.message.reply_text(f"💰 عنوان BTC:\n{BTC}")
+        await update.message.reply_text(BTC)
 
-    # المهام
     elif text == "🎁 المهام":
         await update.message.reply_text(
-            f"""📢 المهام:
-
-1️⃣ ادخل القناة 👇
-{CHANNEL_LINK}
-
-2️⃣ اشترك
-3️⃣ تفاعل مع المنشورات
-
-🎁 بعد التنفيذ يتم تفعيل الأرباح
-
-📞 الدعم: {SUPPORT}"""
+            f"📢 ادخل القناة:\n{CHANNEL_LINK}\nثم تفاعل"
         )
 
-    # السحب
     elif text == "📊 سحب الأرباح":
-        await update.message.reply_text("💸 اختر طريقة السحب:", reply_markup=withdraw_keyboard)
+        await update.message.reply_text("اختر:", reply_markup=withdraw_keyboard)
 
-    elif text in ["🏦 حوالة بنكية", "💳 Payeer", "💰 Perfect Money", "📱 Vodafone Cash",
-                  "📱 Syriatel Cash", "📱 MTN Cash", "🇮🇶 زين كاش", "🇸🇾 حوالة محلية",
-                  "💵 شام كاش", "💲 USDT", "🪙 Bitcoin"]:
-        await update.message.reply_text(
-            f"""💳 الطريقة: {text}
+    elif text in ["🏦 حوالة بنكية","💳 Payeer","💰 Perfect Money","📱 Vodafone Cash",
+                  "📱 Syriatel Cash","📱 MTN Cash","🇮🇶 زين كاش","🇸🇾 حوالة محلية",
+                  "💵 شام كاش","💲 USDT","🪙 Bitcoin"]:
+        await update.message.reply_text("❌ أكمل المهام + دعوة أصدقاء")
 
-❌ لا يمكن السحب حالياً
-
-⚠️ السبب:
-- لم تكمل المهام
-- لم تدعو عدد كافي من الأصدقاء
-
-💡 كلما زاد نشاطك → يتم فتح السحب تلقائياً
-
-📞 الدعم: {SUPPORT}"""
-        )
-
-    # الدعوات
     elif text == "👥 دعوة الأصدقاء":
         await update.message.reply_text(
-            f"""🔗 رابطك:
-
-https://t.me/YOUR_BOT?start={user_id}
-
-💸 اربح 0.20$ لكل شخص
-🚀 الأرباح تزيد مع الوقت"""
+            f"https://t.me/YOUR_BOT?start={user_id}"
         )
 
-    # مكافأة
     elif text == "🎯 مكافأة يومية":
-        await update.message.reply_text("🎯 تم إضافة 0.10$ بنجاح")
+        await update.message.reply_text("تم إضافة 0.10$")
 
-    # أرباح
     elif text == "💰 أرباحي":
-        await update.message.reply_text("💰 رصيدك الحالي: 0.00$\n📈 استمر لزيادة الأرباح")
+        await update.message.reply_text("رصيدك: 0.00$")
 
-    # التاريخ
     elif text == "📅 التاريخ":
-        g, h = get_date()
-        await update.message.reply_text(f"📅\nميلادي: {g}\nهجري: {h}")
+        g,h = get_date()
+        await update.message.reply_text(f"{g}\n{h}")
 
-    # ID
     elif text == "🆔 معرفة ID":
-        await update.message.reply_text(f"🆔 ID الخاص بك:\n{user_id}")
+        await update.message.reply_text(f"ID: {user_id}")
 
-    # تواصل
     elif text == "📞 تواصل مع الإدارة":
-        await update.message.reply_text(
-            f"""📞 تواصل مباشر:
-
-👤 {SUPPORT}
-🆔 {SUPPORT_ID}"""
-        )
+        await update.message.reply_text(f"{SUPPORT}\nID: {SUPPORT_ID}")
 
     elif text == "🔙 رجوع":
-        await update.message.reply_text("رجعت للقائمة الرئيسية", reply_markup=main_keyboard)
+        await update.message.reply_text("رجوع", reply_markup=main_keyboard)
 
 # تشغيل
-app = ApplicationBuilder().token(TOKEN).build()
+keep_alive()
 
+app = ApplicationBuilder().token(TOKEN).build()
 app.add_handler(CommandHandler("start", start))
 app.add_handler(MessageHandler(filters.TEXT, handle))
 
-print("🔥 BOT IS RUNNING...")
+print("🔥 BOT RUNNING...")
 app.run_polling()
