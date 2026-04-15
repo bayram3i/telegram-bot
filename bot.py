@@ -1,217 +1,175 @@
-import telebot
-from telebot.types import *
-import time, json, os, datetime
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
+from datetime import datetime
 
 TOKEN = "8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws"
-CHANNEL = "@bayram_vip"
-ADMIN_ID = 8214596362
 
-bot = telebot.TeleBot(TOKEN)
+CHANNEL_USERNAME = "@bayram_vip"
+CHANNEL_LINK = "https://t.me/bayram_vip"
 
-DATA_FILE = "data.json"
+SUPPORT = "@Gold_3id"
+SUPPORT_ID = "8214596362"
 
-# عناوينك
-USDT_TRC20 = "TMviBrABzuAhy7ToHXXgH3qYUaTBynFwJU"
+# المحافظ
+USDT_TRC20 = "TMviBrABzuAhy7ToHXXgH3qYUaTByFwJU"
 USDT_BEP20 = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
-BTC_ADDRESS = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
+BTC = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
 
-# تحميل البيانات
-if os.path.exists(DATA_FILE):
-    with open(DATA_FILE, "r") as f:
-        users = json.load(f)
-else:
-    users = {}
+# القوائم
+main_keyboard = ReplyKeyboardMarkup([
+    ["💰 أرباحي", "🎁 المهام"],
+    ["🎯 مكافأة يومية", "📊 سحب الأرباح"],
+    ["👥 دعوة الأصدقاء", "💳 إيداع"],
+    ["📅 التاريخ", "🆔 معرفة ID"],
+    ["📞 تواصل مع الإدارة"]
+], resize_keyboard=True)
 
-def save():
-    with open(DATA_FILE, "w") as f:
-        json.dump(users, f)
+deposit_keyboard = ReplyKeyboardMarkup([
+    ["USDT TRC20", "USDT BEP20"],
+    ["BTC"],
+    ["🔙 رجوع"]
+], resize_keyboard=True)
 
-def get_user(uid):
-    uid = str(uid)
-    if uid not in users:
-        users[uid] = {
-            "balance": 0.0,
-            "last_daily": 0,
-            "last_task": 0,
-            "invites": 0,
-            "invited_by": None
-        }
-    return users[uid]
+withdraw_keyboard = ReplyKeyboardMarkup([
+    ["🏦 حوالة بنكية", "💳 Payeer"],
+    ["💰 Perfect Money", "📱 Vodafone Cash"],
+    ["📱 Syriatel Cash", "📱 MTN Cash"],
+    ["🇮🇶 زين كاش", "🇸🇾 حوالة محلية"],
+    ["💵 شام كاش"],
+    ["💲 USDT", "🪙 Bitcoin"],
+    ["🔙 رجوع"]
+], resize_keyboard=True)
 
 # تحقق الاشتراك
-def check_sub(user_id):
+async def is_subscribed(user_id, context):
     try:
-        status = bot.get_chat_member(CHANNEL, user_id)
-        return status.status in ["member", "creator", "administrator"]
+        member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
+        return member.status in ["member", "administrator", "creator"]
     except:
         return False
 
-DAY = 86400
+# start
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
 
-# القوائم
-def main_menu():
-    m = ReplyKeyboardMarkup(resize_keyboard=True)
-    m.row("💰 أرباحي", "🎁 المهام")
-    m.row("🎯 مكافأة يومية", "📊 سحب الأرباح")
-    m.row("👥 دعوة الأصدقاء", "💳 إيداع")
-    m.row("📅 التاريخ", "🆔 ايدي حسابي")
-    m.row("☎️ تواصل معنا")
-    return m
-
-def back_menu():
-    m = ReplyKeyboardMarkup(resize_keyboard=True)
-    m.row("🔙 رجوع")
-    return m
-
-# START
-@bot.message_handler(commands=['start'])
-def start(msg):
-    uid = msg.from_user.id
-    user = get_user(uid)
-
-    args = msg.text.split()
-
-    if len(args) > 1:
-        inviter = args[1]
-        if inviter != str(uid) and inviter in users and user["invited_by"] is None:
-            user["invited_by"] = inviter
-            users[inviter]["balance"] += 0.20
-            users[inviter]["invites"] += 1
-            bot.send_message(int(inviter), "🎉 دعوة جديدة +0.20$")
-
-    save()
-
-    if not check_sub(uid):
-        markup = InlineKeyboardMarkup()
-        markup.add(
-            InlineKeyboardButton("📢 اشترك", url="https://t.me/bayram_vip"),
-            InlineKeyboardButton("✅ تحقق", callback_data="check")
+    if not await is_subscribed(user_id, context):
+        await update.message.reply_text(
+            f"🚫 يجب الاشتراك أولاً في القناة:\n{CHANNEL_LINK}\n\n"
+            "ثم أعد إرسال /start"
         )
-        bot.send_message(uid, "🚫 اشترك بالقناة أولاً", reply_markup=markup)
         return
 
-    bot.send_message(uid, "🔥 أهلاً بك في بوت VIP", reply_markup=main_menu())
-
-# تحقق
-@bot.callback_query_handler(func=lambda c: c.data == "check")
-def check(call):
-    if check_sub(call.from_user.id):
-        bot.send_message(call.message.chat.id, "✅ تم التحقق", reply_markup=main_menu())
-    else:
-        bot.answer_callback_query(call.id, "❌ لم تشترك")
-
-# رجوع
-@bot.message_handler(func=lambda m: m.text == "🔙 رجوع")
-def back(m):
-    bot.send_message(m.chat.id, "رجعت للقائمة الرئيسية", reply_markup=main_menu())
-
-# أرباحي
-@bot.message_handler(func=lambda m: m.text == "💰 أرباحي")
-def balance(m):
-    u = get_user(m.from_user.id)
-    bot.send_message(m.chat.id,
-                     f"💰 رصيدك: {u['balance']}$\n👥 دعواتك: {u['invites']}")
-
-# مكافأة يومية
-@bot.message_handler(func=lambda m: m.text == "🎯 مكافأة يومية")
-def daily(m):
-    u = get_user(m.from_user.id)
-    now = time.time()
-
-    if now - u["last_daily"] < DAY:
-        bot.send_message(m.chat.id, "⏳ استلمتها اليوم")
-        return
-
-    u["balance"] += 0.10
-    u["last_daily"] = now
-    save()
-
-    bot.send_message(m.chat.id, "🎉 +0.10$")
-
-# المهام
-@bot.message_handler(func=lambda m: m.text == "🎁 المهام")
-def tasks(m):
-    bot.send_message(m.chat.id,
-                     "📢 ادخل القناة وتصفح المنشورات ثم اضغط تنفيذ",
-                     reply_markup=back_menu())
-
-@bot.message_handler(func=lambda m: m.text == "📢 تنفيذ المهمة")
-def do_task(m):
-    u = get_user(m.from_user.id)
-    now = time.time()
-
-    if not check_sub(m.from_user.id):
-        bot.send_message(m.chat.id, "❌ اشترك أولاً")
-        return
-
-    if now - u["last_task"] < DAY:
-        bot.send_message(m.chat.id, "⏳ نفذت اليوم")
-        return
-
-    u["balance"] += 0.15
-    u["last_task"] = now
-    save()
-
-    bot.send_message(m.chat.id, "✅ +0.15$")
-
-# الدعوة
-@bot.message_handler(func=lambda m: m.text == "👥 دعوة الأصدقاء")
-def invite(m):
-    link = f"https://t.me/{bot.get_me().username}?start={m.from_user.id}"
-    bot.send_message(m.chat.id,
-                     f"👥 اربح 0.20$ لكل شخص\n\n🔗 رابطك:\n{link}")
-
-# الإيداع
-@bot.message_handler(func=lambda m: m.text == "💳 إيداع")
-def deposit(m):
-    markup = InlineKeyboardMarkup()
-    markup.add(
-        InlineKeyboardButton("USDT TRC20", callback_data="trx"),
-        InlineKeyboardButton("USDT BEP20", callback_data="bsc")
+    await update.message.reply_text(
+        "🔥 مرحباً بك في بوت الأرباح الاحترافي 🔥\n\n"
+        "💸 اربح يومياً من المهام\n"
+        "🚀 نظام سريع وآمن\n\n"
+        f"📞 الدعم: {SUPPORT}",
+        reply_markup=main_keyboard
     )
-    markup.add(
-        InlineKeyboardButton("BTC", callback_data="btc")
-    )
-    bot.send_message(m.chat.id, "اختر الشبكة:", reply_markup=markup)
-
-@bot.callback_query_handler(func=lambda c: c.data in ["trx","bsc","btc"])
-def deposit_show(call):
-    if call.data == "trx":
-        addr = USDT_TRC20
-        net = "TRC20"
-    elif call.data == "bsc":
-        addr = USDT_BEP20
-        net = "BEP20"
-    else:
-        addr = BTC_ADDRESS
-        net = "BTC"
-
-    bot.send_message(call.message.chat.id,
-                     f"💳 الشبكة: {net}\n\n📥 عنوانك:\n`{addr}`\n\n⚠️ أرسل فقط على هذه الشبكة",
-                     parse_mode="Markdown")
 
 # التاريخ
-@bot.message_handler(func=lambda m: m.text == "📅 التاريخ")
-def date(m):
-    now = datetime.datetime.now()
-    bot.send_message(m.chat.id, f"📅 التاريخ:\n{now}")
+def get_date():
+    now = datetime.now()
+    return now.strftime("%Y-%m-%d"), "تقريبي: 1447 هـ"
 
-# ID
-@bot.message_handler(func=lambda m: m.text == "🆔 ايدي حسابي")
-def myid(m):
-    bot.send_message(m.chat.id, f"🆔 ID: {m.from_user.id}")
+# الردود
+async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    user_id = update.message.from_user.id
+    text = update.message.text
 
-# السحب
-@bot.message_handler(func=lambda m: m.text == "📊 سحب الأرباح")
-def withdraw(m):
-    u = get_user(m.from_user.id)
-
-    if u["balance"] < 50:
-        bot.send_message(m.chat.id, "❌ الحد الأدنى 50$")
+    # منع الاستخدام بدون اشتراك
+    if not await is_subscribed(user_id, context):
+        await update.message.reply_text(
+            f"🚫 يجب الاشتراك أولاً:\n{CHANNEL_LINK}\n\n"
+            "ثم أرسل /start"
+        )
         return
 
-    bot.send_message(m.chat.id, "✍️ أرسل بياناتك للسحب")
+    # الإيداع
+    if text == "💳 إيداع":
+        await update.message.reply_text("💰 اختر طريقة الإيداع:", reply_markup=deposit_keyboard)
+
+    elif text == "USDT TRC20":
+        await update.message.reply_text(f"💰 عنوان TRC20:\n{USDT_TRC20}")
+
+    elif text == "USDT BEP20":
+        await update.message.reply_text(f"💰 عنوان BEP20:\n{USDT_BEP20}")
+
+    elif text == "BTC":
+        await update.message.reply_text(f"💰 عنوان BTC:\n{BTC}")
+
+    # المهام
+    elif text == "🎁 المهام":
+        await update.message.reply_text(
+            f"📢 المهام اليومية:\n\n"
+            f"1️⃣ الدخول للقناة:\n{CHANNEL_LINK}\n"
+            f"2️⃣ الاشتراك\n"
+            f"3️⃣ التفاعل مع المنشورات\n\n"
+            f"🎁 بعد الإكمال تحصل على أرباح\n\n"
+            f"📞 الدعم: {SUPPORT}"
+        )
+
+    # السحب
+    elif text == "📊 سحب الأرباح":
+        await update.message.reply_text("💸 اختر طريقة السحب:", reply_markup=withdraw_keyboard)
+
+    elif text in ["🏦 حوالة بنكية", "💳 Payeer", "💰 Perfect Money", "📱 Vodafone Cash",
+                  "📱 Syriatel Cash", "📱 MTN Cash", "🇮🇶 زين كاش", "🇸🇾 حوالة محلية",
+                  "💵 شام كاش", "💲 USDT", "🪙 Bitcoin"]:
+        await update.message.reply_text(
+            f"💳 طريقة السحب: {text}\n\n"
+            "❌ لا يمكن السحب حالياً\n"
+            "⚠️ يجب إكمال المهام + دعوة أصدقاء\n\n"
+            f"📞 تواصل مع الإدارة: {SUPPORT}"
+        )
+
+    # الدعوات
+    elif text == "👥 دعوة الأصدقاء":
+        await update.message.reply_text(
+            f"🔗 رابطك:\nhttps://t.me/YOUR_BOT?start={user_id}\n\n"
+            "💸 اربح 0.20$ لكل شخص"
+        )
+
+    # المكافأة
+    elif text == "🎯 مكافأة يومية":
+        await update.message.reply_text("🎯 تمت إضافة 0.10$ إلى حسابك")
+
+    # الأرباح
+    elif text == "💰 أرباحي":
+        await update.message.reply_text("💰 رصيدك الحالي: 0.00$")
+
+    # التاريخ
+    elif text == "📅 التاريخ":
+        g, h = get_date()
+        await update.message.reply_text(
+            f"📅 التاريخ:\n\n📆 ميلادي: {g}\n🌙 هجري: {h}"
+        )
+
+    # ID المستخدم
+    elif text == "🆔 معرفة ID":
+        await update.message.reply_text(
+            f"🆔 ID حسابك:\n{user_id}\n\n"
+            f"📞 تواصل مع الإدارة: {SUPPORT}"
+        )
+
+    # التواصل
+    elif text == "📞 تواصل مع الإدارة":
+        await update.message.reply_text(
+            f"📞 تواصل مع الإدارة مباشرة:\n\n"
+            f"👤 {SUPPORT}\n"
+            f"🆔 ID: {SUPPORT_ID}"
+        )
+
+    # رجوع
+    elif text == "🔙 رجوع":
+        await update.message.reply_text("🔙 رجعت للقائمة الرئيسية", reply_markup=main_keyboard)
+
 
 # تشغيل
+app = ApplicationBuilder().token(TOKEN).build()
+
+app.add_handler(CommandHandler("start", start))
+app.add_handler(MessageHandler(filters.TEXT, handle))
+
 print("BOT RUNNING...")
-bot.infinity_polling()
+app.run_polling()
