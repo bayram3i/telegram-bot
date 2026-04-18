@@ -1,163 +1,125 @@
-from telegram import Update, ReplyKeyboardMarkup
-from telegram.ext import ApplicationBuilder, CommandHandler, MessageHandler, filters, ContextTypes
-from datetime import datetime
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
+from telegram.ext import ApplicationBuilder, CommandHandler, CallbackQueryHandler, ContextTypes
+import sqlite3
 
-# 🔥 KEEP ALIVE (مهم)
-from flask import Flask
-from threading import Thread
+TOKEN = "8705956398:AAG6YbKmjsAolqg-dBo0IqWQk3UCOTDwbUI"
 
-app_web = Flask('')
+# 💰 عناوينك
+BEP20 = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
+TRC20 = "TMviBrABzuAhy7ToHXXgH3qYUaTBynFwJU"
 
-@app_web.route('/')
-def home():
-    return "Bot is running!"
+# 📞 تواصل
+CONTACT = "@Bayram43ie"
 
-def run():
-    app_web.run(host='0.0.0.0', port=10000)
+# ======================
+# DATABASE
+# ======================
+conn = sqlite3.connect("donation.db", check_same_thread=False)
+cur = conn.cursor()
 
-def keep_alive():
-    t = Thread(target=run)
-    t.start()
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users (
+    user_id INTEGER PRIMARY KEY,
+    donations INTEGER DEFAULT 0
+)
+""")
+conn.commit()
 
-# 🔐 التوكن
-TOKEN = "8632139720:AAFxaBKYXoYYijSBpIHeKPlfpMg1UmE47ws"
+def add_user(user_id):
+    cur.execute("INSERT OR IGNORE INTO users (user_id) VALUES (?)", (user_id,))
+    conn.commit()
 
-CHANNEL_USERNAME = "@bayram_vip"
-CHANNEL_LINK = "https://t.me/bayram_vip"
+def add_donation(user_id):
+    cur.execute("UPDATE users SET donations = donations + 1 WHERE user_id=?", (user_id,))
+    conn.commit()
 
-SUPPORT = "@Gold_3id"
-SUPPORT_ID = "8214596362"
+def get_donation(user_id):
+    cur.execute("SELECT donations FROM users WHERE user_id=?", (user_id,))
+    result = cur.fetchone()
+    return result[0] if result else 0
 
-# المحافظ
-USDT_TRC20 = "TMviBrABzuAhy7ToHXXgH3qYUaTByFwJU"
-USDT_BEP20 = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
-BTC = "0x5040f6e845e37dd40be20ea9e0af8c9cdb8c282b"
-
-# الواجهة
-main_keyboard = ReplyKeyboardMarkup([
-    ["💰 أرباحي", "🎁 المهام"],
-    ["🎯 مكافأة يومية", "📊 سحب الأرباح"],
-    ["👥 دعوة الأصدقاء", "💳 إيداع"],
-    ["📅 التاريخ", "🆔 معرفة ID"],
-    ["📞 تواصل مع الإدارة"]
-], resize_keyboard=True)
-
-deposit_keyboard = ReplyKeyboardMarkup([
-    ["USDT TRC20", "USDT BEP20"],
-    ["BTC"],
-    ["🔙 رجوع"]
-], resize_keyboard=True)
-
-withdraw_keyboard = ReplyKeyboardMarkup([
-    ["🏦 حوالة بنكية", "💳 Payeer"],
-    ["💰 Perfect Money", "📱 Vodafone Cash"],
-    ["📱 Syriatel Cash", "📱 MTN Cash"],
-    ["🇮🇶 زين كاش", "🇸🇾 حوالة محلية"],
-    ["💵 شام كاش"],
-    ["💲 USDT", "🪙 Bitcoin"],
-    ["🔙 رجوع"]
-], resize_keyboard=True)
-
-# تحقق الاشتراك
-async def is_subscribed(user_id, context):
-    try:
-        member = await context.bot.get_chat_member(CHANNEL_USERNAME, user_id)
-        return member.status in ["member", "administrator", "creator"]
-    except:
-        return False
-
-# start
+# ======================
+# START UI
+# ======================
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
+    user = update.effective_user
+    add_user(user.id)
 
-    if not await is_subscribed(user_id, context):
-        await update.message.reply_text(
-            f"🚫 اشترك أولاً:\n{CHANNEL_LINK}\nثم أرسل /start"
-        )
-        return
+    keyboard = [
+        [InlineKeyboardButton("💰 تبرع الآن", callback_data="donate")],
+        [InlineKeyboardButton("📊 تبرعاتي", callback_data="stats")],
+        [InlineKeyboardButton("📞 تواصل معنا", url=f"https://t.me/{CONTACT.replace('@','')}")]
+    ]
 
     await update.message.reply_text(
-        f"""🔥 أهلاً بك في بوت الأرباح 🔥
-
-💸 اربح يومياً بسهولة
-👥 زيد أرباحك بدعوة الأصدقاء
-🚀 نظام ذكي وتحديث مستمر
-
-📞 الدعم: {SUPPORT}""",
-        reply_markup=main_keyboard
+        f"✨ أهلاً بك {user.first_name}\n\n"
+        "🤍 مرحباً بك في منصة التبرعات\n\n"
+        "💡 تبرعك يساعد في دعم المحتاجين\n"
+        "اختر من الخيارات بالأسفل 👇",
+        reply_markup=InlineKeyboardMarkup(keyboard)
     )
 
-# التاريخ
-def get_date():
-    now = datetime.now()
-    return now.strftime("%Y-%m-%d"), "تقريبي: 1447 هـ"
+# ======================
+# BUTTONS
+# ======================
+async def button(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    user_id = query.from_user.id
+    await query.answer()
 
-# الردود
-async def handle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    user_id = update.message.from_user.id
-    text = update.message.text
+    # 💰 صفحة التبرع
+    if query.data == "donate":
+        keyboard = [
+            [InlineKeyboardButton("📥 BEP20", callback_data="bep20")],
+            [InlineKeyboardButton("📥 TRC20", callback_data="trc20")],
+            [InlineKeyboardButton("✅ تم التبرع", callback_data="done")],
+            [InlineKeyboardButton("🔙 رجوع", callback_data="back")]
+        ]
 
-    if not await is_subscribed(user_id, context):
-        await update.message.reply_text(
-            f"🚫 اشترك أولاً:\n{CHANNEL_LINK}\nثم /start"
-        )
-        return
-
-    if text == "💳 إيداع":
-        await update.message.reply_text("💰 اختر:", reply_markup=deposit_keyboard)
-
-    elif text == "USDT TRC20":
-        await update.message.reply_text(USDT_TRC20)
-
-    elif text == "USDT BEP20":
-        await update.message.reply_text(USDT_BEP20)
-
-    elif text == "BTC":
-        await update.message.reply_text(BTC)
-
-    elif text == "🎁 المهام":
-        await update.message.reply_text(
-            f"📢 ادخل القناة:\n{CHANNEL_LINK}\nثم تفاعل"
+        await query.message.reply_text(
+            "💰 اختر طريقة التبرع:",
+            reply_markup=InlineKeyboardMarkup(keyboard)
         )
 
-    elif text == "📊 سحب الأرباح":
-        await update.message.reply_text("اختر:", reply_markup=withdraw_keyboard)
-
-    elif text in ["🏦 حوالة بنكية","💳 Payeer","💰 Perfect Money","📱 Vodafone Cash",
-                  "📱 Syriatel Cash","📱 MTN Cash","🇮🇶 زين كاش","🇸🇾 حوالة محلية",
-                  "💵 شام كاش","💲 USDT","🪙 Bitcoin"]:
-        await update.message.reply_text("❌ أكمل المهام + دعوة أصدقاء")
-
-    elif text == "👥 دعوة الأصدقاء":
-        await update.message.reply_text(
-            f"https://t.me/YOUR_BOT?start={user_id}"
+    # BEP20
+    elif query.data == "bep20":
+        await query.message.reply_text(
+            f"📥 عنوان BEP20:\n\n{BEP20}\n\n📋 انسخ العنوان وقم بالتحويل"
         )
 
-    elif text == "🎯 مكافأة يومية":
-        await update.message.reply_text("تم إضافة 0.10$")
+    # TRC20
+    elif query.data == "trc20":
+        await query.message.reply_text(
+            f"📥 عنوان TRC20:\n\n{TRC20}\n\n📋 انسخ العنوان وقم بالتحويل"
+        )
 
-    elif text == "💰 أرباحي":
-        await update.message.reply_text("رصيدك: 0.00$")
+    # تأكيد التبرع
+    elif query.data == "done":
+        add_donation(user_id)
 
-    elif text == "📅 التاريخ":
-        g,h = get_date()
-        await update.message.reply_text(f"{g}\n{h}")
+        await query.message.reply_text(
+            "🙏 شكراً لتبرعك\n🤍 سيتم مراجعته\n🌟 جزاك الله خير"
+        )
 
-    elif text == "🆔 معرفة ID":
-        await update.message.reply_text(f"ID: {user_id}")
+    # الإحصائيات
+    elif query.data == "stats":
+        total = get_donation(user_id)
 
-    elif text == "📞 تواصل مع الإدارة":
-        await update.message.reply_text(f"{SUPPORT}\nID: {SUPPORT_ID}")
+        await query.message.reply_text(
+            f"📊 عدد مرات تبرعك:\n💰 {total}"
+        )
 
-    elif text == "🔙 رجوع":
-        await update.message.reply_text("رجوع", reply_markup=main_keyboard)
+    # رجوع
+    elif query.data == "back":
+        await start(update, context)
 
-# تشغيل
-keep_alive()
-
+# ======================
+# RUN
+# ======================
 app = ApplicationBuilder().token(TOKEN).build()
-app.add_handler(CommandHandler("start", start))
-app.add_handler(MessageHandler(filters.TEXT, handle))
 
-print("🔥 BOT RUNNING...")
+app.add_handler(CommandHandler("start", start))
+app.add_handler(CallbackQueryHandler(button))
+
+print("Donation UI Bot Running...")
 app.run_polling()
